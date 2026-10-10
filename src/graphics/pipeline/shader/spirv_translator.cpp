@@ -3501,6 +3501,23 @@ spv::Id SpirvShaderTranslator::LoadOperandStorage(const InstructionOperand& oper
       GetStorageAddressingIndex(operand.storage_addressing_mode, operand.storage_index,
                                 operand.storage_source == InstructionStorageSource::kConstantFloat);
   EnsureBuildPointAvailable();
+  // Out-of-range relative reads return 0 as in Direct3D (undefined in Vulkan):
+  // load element 0 instead and replace the result.
+  spv::Id in_range = spv::NoResult;
+  if (operand.storage_addressing_mode != InstructionStorageAddressingMode::kAbsolute) {
+    uint32_t element_count = 0;
+    if (operand.storage_source == InstructionStorageSource::kConstantFloat) {
+      element_count = current_shader().constant_register_map().float_count;
+    } else if (operand.storage_source == InstructionStorageSource::kRegister) {
+      element_count = register_count();
+    }
+    if (element_count) {
+      in_range = builder_->createBinOp(spv::OpULessThan, type_bool_,
+                                       builder_->createUnaryOp(spv::OpBitcast, type_uint_, index),
+                                       builder_->makeUintConstant(element_count));
+      index = builder_->createTriOp(spv::OpSelect, type_int_, in_range, index, const_int_0_);
+    }
+  }
   spv::Id vec4_pointer = spv::NoResult;
   switch (operand.storage_source) {
     case InstructionStorageSource::kRegister:
@@ -3525,7 +3542,13 @@ spv::Id SpirvShaderTranslator::LoadOperandStorage(const InstructionOperand& oper
       assert_unhandled_case(operand.storage_source);
   }
   assert_true(vec4_pointer != spv::NoResult);
-  return builder_->createLoad(vec4_pointer, spv::NoPrecision);
+  spv::Id value = builder_->createLoad(vec4_pointer, spv::NoPrecision);
+  if (in_range != spv::NoResult) {
+    value = builder_->createTriOp(spv::OpSelect, type_float4_,
+                                  builder_->smearScalar(spv::NoPrecision, in_range, type_bool4_),
+                                  value, const_float4_0_);
+  }
+  return value;
 }
 
 spv::Id SpirvShaderTranslator::ApplyOperandModifiers(spv::Id operand_value,
