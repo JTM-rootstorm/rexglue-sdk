@@ -1748,7 +1748,7 @@ VkFormat VulkanRenderTargetCache::GetColorVulkanFormat(
                                              : VK_FORMAT_R8G8B8A8_UNORM;
     case xenos::ColorRenderTargetFormat::k_2_10_10_10:
     case xenos::ColorRenderTargetFormat::k_2_10_10_10_AS_10_10_10_10:
-      return VK_FORMAT_A8B8G8R8_UNORM_PACK32;
+      return VK_FORMAT_A2B10G10R10_UNORM_PACK32;
     case xenos::ColorRenderTargetFormat::k_2_10_10_10_FLOAT:
     case xenos::ColorRenderTargetFormat::k_2_10_10_10_FLOAT_AS_16_16_16_16:
       return VK_FORMAT_R16G16B16A16_SFLOAT;
@@ -3530,10 +3530,10 @@ VkShaderModule VulkanRenderTargetCache::GetTransferShader(TransferShaderKey key)
           } else if (dest_is_color &&
                      (dest_color_format == xenos::ColorRenderTargetFormat::k_8_8_8_8 ||
                       dest_color_format == xenos::ColorRenderTargetFormat::k_8_8_8_8_GAMMA)) {
-            if (source_color_format != dest_color_format) {
+            if (source_color_format != dest_color_format && gamma_render_target_as_unorm16_) {
               // Color space conversion between k_8_8_8_8 and
-              // k_8_8_8_8_GAMMA.
-              if (dest_color_format != xenos::ColorRenderTargetFormat::k_8_8_8_8) {
+              // k_8_8_8_8_GAMMA, whose render targets hold linear values.
+              if (dest_color_format == xenos::ColorRenderTargetFormat::k_8_8_8_8) {
                 for (uint32_t i = 0; i < 3; ++i) {
                   source_color[0][i] = LinearToPWLGamma(source_color[0][i], true);
                 }
@@ -3758,6 +3758,10 @@ VkShaderModule VulkanRenderTargetCache::GetTransferShader(TransferShaderKey key)
                                         builder.makeUintConstant(8), builder.makeUintConstant(24));
         }
       }
+    }
+    // For stencil bit output, use stencil directly for the discard check.
+    if (packed == spv::NoResult && mode.output == TransferOutput::kStencilBit) {
+      packed = source_stencil[0];
     }
     switch (mode.output) {
       case TransferOutput::kColor: {
