@@ -16,6 +16,7 @@
 #include <functional>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <rex/graphics/flags.h>
 #include <rex/graphics/pipeline/render_target/cache.h>
@@ -146,6 +147,15 @@ class VulkanRenderTargetCache final : public RenderTargetCache {
   bool IsMsaa2xSupported(bool subpass_has_attachments) const {
     return subpass_has_attachments ? msaa_2x_attachments_supported_
                                    : msaa_2x_no_attachments_supported_;
+  }
+
+  // Xenos 2x MSAA sample locations for native 2x pipelines, or nullptr.
+  const VkSampleLocationsInfoEXT* GetMsaa2xSampleLocationsInfo() const {
+    return msaa_2x_xenos_sample_locations_ ? &msaa_2x_sample_locations_info_ : nullptr;
+  }
+  // Sample locations to pass to layout transitions of an image, or nullptr.
+  const VkSampleLocationsInfoEXT* GetImageSampleLocationsInfo(VkImage image) const {
+    return sample_locations_depth_images_.count(image) ? &msaa_2x_sample_locations_info_ : nullptr;
   }
 
   // Returns the render pass object, or VK_NULL_HANDLE if failed to create.
@@ -819,6 +829,12 @@ class VulkanRenderTargetCache final : public RenderTargetCache {
 
   bool msaa_2x_attachments_supported_ = false;
   bool msaa_2x_no_attachments_supported_ = false;
+  bool msaa_2x_xenos_sample_locations_ = false;
+  VkSampleLocationEXT msaa_2x_sample_locations_[2] = {};
+  VkSampleLocationsInfoEXT msaa_2x_sample_locations_info_ = {};
+  // Depth render target images created with
+  // VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT.
+  std::unordered_set<VkImage> sample_locations_depth_images_;
   bool color_16bit_transfer_uint_formats_supported_ = true;
   bool color_32bit_transfer_uint_formats_supported_ = true;
   bool color_rg16_draw_format_fallback_to_float_ = false;

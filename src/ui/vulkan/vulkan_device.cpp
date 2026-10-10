@@ -210,6 +210,7 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
   bool ext_1_3_EXT_shader_demote_to_helper_invocation = false;
   bool ext_1_3_KHR_dynamic_rendering = false;
   bool ext_EXT_non_seamless_cube_map = false;
+  bool ext_EXT_sample_locations = false;
   if (with_gpu_emulation) {
     // #15.
     XE_UI_VULKAN_LOCAL_PROMOTED_EXTENSION(KHR_sampler_mirror_clamp_to_edge, 1, 2)
@@ -220,6 +221,8 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
     // #148.
     XE_UI_VULKAN_STRUCT_PROMOTED_EXTENSION(KHR_image_format_list, 1, 2)
     if (get_physical_device_properties2_supported) {
+      // #144.
+      XE_UI_VULKAN_LOCAL_EXTENSION(EXT_sample_locations)
       // #157.
       XE_UI_VULKAN_STRUCT_PROMOTED_EXTENSION(KHR_sampler_ycbcr_conversion, 1, 1)
       // #198. Also must be enabled for VK_KHR_spirv_1_4.
@@ -332,6 +335,8 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
       features_EXT_custom_border_color;
   VkPhysicalDeviceCustomBorderColorPropertiesEXT properties_EXT_custom_border_color = {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_PROPERTIES_EXT};
+  VkPhysicalDeviceSampleLocationsPropertiesEXT properties_EXT_sample_locations = {
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLE_LOCATIONS_PROPERTIES_EXT};
   VulkanFeatures<VkPhysicalDeviceRobustness2FeaturesEXT,
                  VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT>
       features_EXT_robustness2;
@@ -375,6 +380,10 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
     }
     if (device->extensions_.ext_EXT_robustness2) {
       features_EXT_robustness2.Link(supported_features_2, device_create_info);
+    }
+    if (ext_EXT_sample_locations) {
+      properties_EXT_sample_locations.pNext = properties_2.pNext;
+      properties_2.pNext = &properties_EXT_sample_locations;
     }
     ifn.vkGetPhysicalDeviceProperties2(physical_device, &properties_2);
     ifn.vkGetPhysicalDeviceFeatures2(physical_device, &supported_features_2);
@@ -729,6 +738,10 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
     if (with_gpu_emulation) {
       XE_UI_VULKAN_FEATURE_2(features_EXT_robustness2, nullDescriptor)
     }
+  }
+
+  if (ext_EXT_sample_locations) {
+    XE_UI_VULKAN_PROPERTY_2(properties_EXT_sample_locations, sampleLocationSampleCounts)
   }
 
 #undef XE_UI_VULKAN_LIMIT
