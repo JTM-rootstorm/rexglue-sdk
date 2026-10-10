@@ -384,6 +384,23 @@ bool VulkanRenderTargetCache::Initialize(uint32_t shared_memory_binding_count) {
     msaa_2x_attachments_supported_ = false;
     msaa_2x_no_attachments_supported_ = false;
   }
+  msaa_2x_xenos_sample_locations_ =
+      msaa_2x_attachments_supported_ &&
+      (device_properties.sampleLocationSampleCounts & VK_SAMPLE_COUNT_2_BIT) != 0;
+  if (msaa_2x_xenos_sample_locations_) {
+    for (uint32_t i = 0; i < 2; ++i) {
+      VkSampleLocationEXT& location =
+          msaa_2x_sample_locations_[draw_util::GetD3D10SampleIndexForGuest2xMSAA(i, true)];
+      location.x = 0.5f + draw_util::kXenosSamplePositions2x[i][0] * (1.0f / 16.0f);
+      location.y = 0.5f + draw_util::kXenosSamplePositions2x[i][1] * (1.0f / 16.0f);
+    }
+    msaa_2x_sample_locations_info_.sType = VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT;
+    msaa_2x_sample_locations_info_.pNext = nullptr;
+    msaa_2x_sample_locations_info_.sampleLocationsPerPixel = VK_SAMPLE_COUNT_2_BIT;
+    msaa_2x_sample_locations_info_.sampleLocationGridSize = {1, 1};
+    msaa_2x_sample_locations_info_.sampleLocationsCount = 2;
+    msaa_2x_sample_locations_info_.pSampleLocations = msaa_2x_sample_locations_;
+  }
   bool integer_transfer_sample_1x_supported =
       (device_properties.framebufferColorSampleCounts & VK_SAMPLE_COUNT_1_BIT) != 0 &&
       (device_properties.sampledImageIntegerSampleCounts & VK_SAMPLE_COUNT_1_BIT) != 0;
@@ -826,6 +843,7 @@ bool VulkanRenderTargetCache::Initialize(uint32_t shared_memory_binding_count) {
     // Keep parity with D3D12 ROV, which uses 2x-as-4x in this path.
     msaa_2x_attachments_supported_ = false;
     msaa_2x_no_attachments_supported_ = false;
+    msaa_2x_xenos_sample_locations_ = false;
 
     // Blending is done in linear space directly in shaders.
     gamma_render_target_as_unorm16_ = false;
@@ -1840,6 +1858,7 @@ VulkanRenderTargetCache::VulkanRenderTarget::~VulkanRenderTarget() {
     dfn.vkDestroyImageView(device, view_depth_stencil_, nullptr);
   }
   dfn.vkDestroyImageView(device, view_depth_color_, nullptr);
+  render_target_cache_.sample_locations_depth_images_.erase(image_);
   dfn.vkDestroyImage(device, image_, nullptr);
   dfn.vkFreeMemory(device, memory_, nullptr);
 }
@@ -1891,6 +1910,9 @@ RenderTargetCache::RenderTarget* VulkanRenderTargetCache::CreateRenderTarget(Ren
     image_create_info.format = GetDepthVulkanFormat(key.GetDepthFormat());
     transfer_format = image_create_info.format;
     image_create_info.usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    if (key.msaa_samples == xenos::MsaaSamples::k2X && msaa_2x_xenos_sample_locations_) {
+      image_create_info.flags |= VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT;
+    }
   } else {
     xenos::ColorRenderTargetFormat color_format = key.GetColorFormat();
     image_create_info.format = GetColorVulkanFormat(color_format);
@@ -2072,6 +2094,9 @@ RenderTargetCache::RenderTarget* VulkanRenderTargetCache::CreateRenderTarget(Ren
   }
   dfn.vkUpdateDescriptorSets(device, key.is_depth ? 2 : 1, descriptor_set_write, 0, nullptr);
 
+  if (image_create_info.flags & VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT) {
+    sample_locations_depth_images_.insert(image);
+  }
   return new VulkanRenderTarget(key, *this, image, memory, view_depth_color, view_depth_stencil,
                                 view_stencil, view_srgb, view_color_transfer_separate,
                                 descriptor_set_index_transfer_source);
@@ -4384,6 +4409,16 @@ VkPipeline const* VulkanRenderTargetCache::GetTransferPipelines(TransferPipeline
       (dest_sample_count == 2 && !msaa_2x_attachments_supported_)
           ? VK_SAMPLE_COUNT_4_BIT
           : VkSampleCountFlagBits(dest_sample_count);
+  VkPipelineSampleLocationsStateCreateInfoEXT sample_locations_state = {};
+  if (multisample_state.rasterizationSamples == VK_SAMPLE_COUNT_2_BIT &&
+      msaa_2x_xenos_sample_locations_) {
+    // Same sample locations as the guest draws into these render targets.
+    sample_locations_state.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT;
+    sample_locations_state.sampleLocationsEnable = VK_TRUE;
+    sample_locations_state.sampleLocationsInfo = msaa_2x_sample_locations_info_;
+    multisample_state.pNext = &sample_locations_state;
+  }
   if (dest_sample_count > 1) {
     if (device_properties.sampleRateShading) {
       multisample_state.sampleShadingEnable = VK_TRUE;

@@ -168,6 +168,10 @@ class VulkanDevice {
     // VK_EXT_robustness2
 
     bool nullDescriptor = false;
+
+    // VK_EXT_sample_locations (#144)
+
+    VkSampleCountFlags sampleLocationSampleCounts = 0;
   };
 
   // Properties of the core API and enabled extensions, and enabled features.

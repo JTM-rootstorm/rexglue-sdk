@@ -105,6 +105,11 @@ bool IsRasterizationPotentiallyDone(const RegisterFile& regs, bool primitive_pol
 // calculations related to host MSAA, in 1/16th of a pixel.
 extern const int8_t kD3D10StandardSamplePositions2x[2][2];
 extern const int8_t kD3D10StandardSamplePositions4x[4][2];
+// Xenos 2x sample positions in guest sample order, in 1/16th of a pixel. In
+// 4D5307D5, the guest's Direct3D shifts 2x viewports by (-0.25, 0.25) so that
+// a sample 0 depth resolve matches later 1x passes, which only works with
+// sample 0 here. Sample 1 is assumed to be the opposite one.
+extern const int8_t kXenosSamplePositions2x[2][2];
 
 reg::RB_DEPTHCONTROL GetNormalizedDepthControl(const RegisterFile& regs);
 

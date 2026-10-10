@@ -3291,6 +3291,18 @@ bool VulkanPipelineCache::EnsurePipelineCreated(const PipelineCreationArguments&
     multisample_state.rasterizationSamples =
         VkSampleCountFlagBits(uint32_t(1) << uint32_t(description.render_pass_key.msaa_samples));
   }
+  VkPipelineSampleLocationsStateCreateInfoEXT sample_locations_state = {};
+  if (multisample_state.rasterizationSamples == VK_SAMPLE_COUNT_2_BIT && subpass_has_attachments) {
+    const VkSampleLocationsInfoEXT* sample_locations_info =
+        render_target_cache_.GetMsaa2xSampleLocationsInfo();
+    if (sample_locations_info) {
+      sample_locations_state.sType =
+          VK_STRUCTURE_TYPE_PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT;
+      sample_locations_state.sampleLocationsEnable = VK_TRUE;
+      sample_locations_state.sampleLocationsInfo = *sample_locations_info;
+      multisample_state.pNext = &sample_locations_state;
+    }
+  }
   if (description.sample_rate_shading &&
       multisample_state.rasterizationSamples != VK_SAMPLE_COUNT_1_BIT) {
     multisample_state.sampleShadingEnable = VK_TRUE;

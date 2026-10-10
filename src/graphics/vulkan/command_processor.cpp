@@ -3039,7 +3039,12 @@ bool VulkanCommandProcessor::PushImageMemoryBarrier(
   VkImageMemoryBarrier& image_memory_barrier =
       pending_barriers_image_memory_barriers_.emplace_back();
   image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  image_memory_barrier.pNext = nullptr;
+  // Depth images rendered with custom sample locations need them for layout
+  // transitions (the info is owned by the render target cache, so it outlives
+  // the deferred command buffer).
+  image_memory_barrier.pNext = (old_layout != new_layout && render_target_cache_)
+                                   ? render_target_cache_->GetImageSampleLocationsInfo(image)
+                                   : nullptr;
   image_memory_barrier.srcAccessMask = src_access_mask;
   image_memory_barrier.dstAccessMask = dst_access_mask;
   image_memory_barrier.oldLayout = old_layout;
