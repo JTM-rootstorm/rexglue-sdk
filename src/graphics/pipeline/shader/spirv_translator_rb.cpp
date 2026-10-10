@@ -1402,6 +1402,23 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
       depth = SpirvShaderTranslator::Depth20e4To32(*builder_, depth_float24, 0, true, false,
                                                    ext_inst_glsl_std_450_);
       builder_->createStore(depth, output_fragment_depth_);
+    } else if (current_shader().writes_depth()) {
+      // If not converting, but the shader writes depth explicitly, for float24,
+      // need to scale it from guest 0...1 to host 0...0.5 to support
+      // reinterpretation round trips as viewport scaling doesn't apply to
+      // oDepth.
+      spv::Id depth = builder_->createLoad(output_fragment_depth_, spv::NoPrecision);
+      spv::Id is_float24 = builder_->createBinOp(
+          spv::OpINotEqual, type_bool_,
+          builder_->createBinOp(spv::OpBitwiseAnd, type_uint_, main_system_constant_flags_,
+                                builder_->makeUintConstant(kSysFlag_DepthFloat24)),
+          const_uint_0_);
+      depth = builder_->createTriOp(
+          spv::OpSelect, type_float_, is_float24,
+          builder_->createNoContractionBinOp(spv::OpFMul, type_float_, depth,
+                                             builder_->makeFloatConstant(0.5f)),
+          depth);
+      builder_->createStore(depth, output_fragment_depth_);
     }
   }
 
