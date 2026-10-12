@@ -1302,7 +1302,7 @@ void SpirvShaderTranslator::ProcessLabel(uint32_t cf_index) {
   CloseExecConditionals();
 
   spv::Function& function = builder_->getBuildPoint()->getParent();
-  // Create the next switch case and fallthrough to it.
+  // Create the next switch case.
   spv::Block* new_case = new spv::Block(builder_->getUniqueId(), function);
   main_switch_op_->addImmediateOperand(cf_index);
   main_switch_op_->addIdOperand(new_case->getId());
@@ -1311,7 +1311,11 @@ void SpirvShaderTranslator::ProcessLabel(uint32_t cf_index) {
   new_case->addPredecessor(main_switch_header_);
   // The previous block may have already been terminated if was exece.
   if (!builder_->getBuildPoint()->isTerminated()) {
-    builder_->createBranch(new_case);
+    // Enter the next case through the main loop, like a jump to it: NVIDIA
+    // miscompiles case fallthrough inside the main loop.
+    main_switch_next_pc_phi_operands_.push_back(builder_->makeIntConstant(int(cf_index)));
+    main_switch_next_pc_phi_operands_.push_back(builder_->getBuildPoint()->getId());
+    builder_->createBranch(main_loop_continue_);
   }
   function.addBlock(new_case);
   builder_->setBuildPoint(new_case);
