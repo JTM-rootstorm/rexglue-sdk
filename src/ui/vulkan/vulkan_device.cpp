@@ -233,6 +233,8 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
       XE_UI_VULKAN_LOCAL_PROMOTED_EXTENSION(KHR_dynamic_rendering, 1, 3)
       // #277.
       XE_UI_VULKAN_LOCAL_PROMOTED_EXTENSION(EXT_shader_demote_to_helper_invocation, 1, 3)
+      // #284.
+      XE_UI_VULKAN_STRUCT_EXTENSION(EXT_depth_bias_control)
       // #423.
       XE_UI_VULKAN_LOCAL_EXTENSION(EXT_non_seamless_cube_map)
       // Required for non-black YCbCr border color parity with D3D12.
@@ -337,6 +339,9 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_PROPERTIES_EXT};
   VkPhysicalDeviceSampleLocationsPropertiesEXT properties_EXT_sample_locations = {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLE_LOCATIONS_PROPERTIES_EXT};
+  VulkanFeatures<VkPhysicalDeviceDepthBiasControlFeaturesEXT,
+                 VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_BIAS_CONTROL_FEATURES_EXT>
+      features_EXT_depth_bias_control;
   VulkanFeatures<VkPhysicalDeviceRobustness2FeaturesEXT,
                  VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT>
       features_EXT_robustness2;
@@ -384,6 +389,9 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
     if (ext_EXT_sample_locations) {
       properties_EXT_sample_locations.pNext = properties_2.pNext;
       properties_2.pNext = &properties_EXT_sample_locations;
+    }
+    if (device->extensions_.ext_EXT_depth_bias_control) {
+      features_EXT_depth_bias_control.Link(supported_features_2, device_create_info);
     }
     ifn.vkGetPhysicalDeviceProperties2(physical_device, &properties_2);
     ifn.vkGetPhysicalDeviceFeatures2(physical_device, &supported_features_2);
@@ -744,6 +752,15 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
     XE_UI_VULKAN_PROPERTY_2(properties_EXT_sample_locations, sampleLocationSampleCounts)
   }
 
+  if (device->extensions_.ext_EXT_depth_bias_control) {
+    if (with_gpu_emulation) {
+      XE_UI_VULKAN_FEATURE_2(features_EXT_depth_bias_control, depthBiasControl)
+      XE_UI_VULKAN_FEATURE_2(features_EXT_depth_bias_control,
+                             leastRepresentableValueForceUnormRepresentation)
+      XE_UI_VULKAN_FEATURE_2(features_EXT_depth_bias_control, depthBiasExact)
+    }
+  }
+
 #undef XE_UI_VULKAN_LIMIT
 #undef XE_UI_VULKAN_ENUM_LIMIT
 #undef XE_UI_VULKAN_FEATURE
@@ -814,6 +831,9 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
   }
   if (device->extensions_.ext_KHR_swapchain) {
 #include <rex/ui/vulkan/functions/device_khr_swapchain.inc>
+  }
+  if (device->extensions_.ext_EXT_depth_bias_control) {
+#include <rex/ui/vulkan/functions/device_ext_depth_bias_control.inc>
   }
 #undef XE_UI_VULKAN_FUNCTION_PROMOTED
 

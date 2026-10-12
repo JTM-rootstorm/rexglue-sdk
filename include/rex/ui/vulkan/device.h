@@ -172,6 +172,12 @@ class VulkanDevice {
     // VK_EXT_sample_locations (#144)
 
     VkSampleCountFlags sampleLocationSampleCounts = 0;
+
+    // VK_EXT_depth_bias_control (#284)
+
+    bool depthBiasControl = false;
+    bool leastRepresentableValueForceUnormRepresentation = false;
+    bool depthBiasExact = false;
   };
 
   // Properties of the core API and enabled extensions, and enabled features.
@@ -203,6 +209,8 @@ class VulkanDevice {
     bool ext_1_3_KHR_maintenance4 = false;  // #414
     // Has optional features not implied by this being true.
     bool ext_1_3_KHR_dynamic_rendering = false;  // #55
+    // Has optional features not implied by this being true.
+    bool ext_EXT_depth_bias_control = false;  // #284
   };
 
   const Extensions& extensions() const { return extensions_; }
@@ -224,6 +232,8 @@ class VulkanDevice {
 #include <rex/ui/vulkan/functions/device_1_3_khr_maintenance4.inc>
     // VK_KHR_dynamic_rendering (#55, promoted to 1.3)
 #include <rex/ui/vulkan/functions/device_1_3_khr_dynamic_rendering.inc>
+    // VK_EXT_depth_bias_control (#284)
+#include <rex/ui/vulkan/functions/device_ext_depth_bias_control.inc>
 #undef XE_UI_VULKAN_FUNCTION_PROMOTED
 #undef XE_UI_VULKAN_FUNCTION
   };
