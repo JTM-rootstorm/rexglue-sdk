@@ -69,6 +69,12 @@ REXCVAR_DEFINE_BOOL(vulkan_dynamic_rendering, true, "GPU/Vulkan",
                     "device (falls back to render passes otherwise)")
     .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
+REXCVAR_DEFINE_BOOL(vulkan_depth_bias_force_unorm, true, "GPU/Vulkan",
+                    "Apply the depth bias in constant units on float depth buffers where "
+                    "VK_EXT_depth_bias_control supports it, so the bias keeps its absolute size at "
+                    "every depth")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+
 namespace rex::graphics::vulkan {
 
 namespace {
@@ -5710,13 +5716,23 @@ void VulkanCommandProcessor::UpdateDynamicState(const draw_util::ViewportInfo& v
 
   if (render_target_cache_->GetPath() == RenderTargetCache::Path::kHostRenderTargets) {
     // Depth bias.
+    const ui::vulkan::VulkanDevice::Properties& device_properties = GetVulkanDevice()->properties();
+    const bool depth_bias_force_unorm =
+        REXCVAR_GET(vulkan_depth_bias_force_unorm) && device_properties.depthBiasControl &&
+        device_properties.leastRepresentableValueForceUnormRepresentation &&
+        device_properties.depthBiasExact;
     float depth_bias_constant_factor, depth_bias_slope_factor;
     draw_util::GetPreferredFacePolygonOffset(regs, primitive_polygonal, depth_bias_slope_factor,
                                              depth_bias_constant_factor);
-    depth_bias_constant_factor *=
-        regs.Get<reg::RB_DEPTH_INFO>().depth_format == xenos::DepthRenderTargetFormat::kD24S8
-            ? draw_util::kD3D10PolygonOffsetFactorUnorm24
-            : draw_util::kD3D10PolygonOffsetFactorFloat24;
+    const bool depth_float24 =
+        regs.Get<reg::RB_DEPTH_INFO>().depth_format == xenos::DepthRenderTargetFormat::kD24FS8;
+    depth_bias_constant_factor *= depth_float24 ? draw_util::kD3D10PolygonOffsetFactorFloat24
+                                                : draw_util::kD3D10PolygonOffsetFactorUnorm24;
+    if (depth_bias_force_unorm && depth_float24) {
+      // With a constant bias unit, the host 0...0.5 depth range no longer
+      // lowers the exponent (see kD3D10PolygonOffsetFactorFloat24).
+      depth_bias_constant_factor *= 0.5f;
+    }
     // With non-square resolution scaling, make sure the worst-case impact is
     // reverted (slope only along the scaled axis), thus max. More bias is
     // better than less bias, because less bias means Z fighting with the
@@ -5733,8 +5749,14 @@ void VulkanCommandProcessor::UpdateDynamicState(const draw_util::ViewportInfo& v
     if (dynamic_depth_bias_update_needed_) {
       dynamic_depth_bias_constant_factor_ = depth_bias_constant_factor;
       dynamic_depth_bias_slope_factor_ = depth_bias_slope_factor;
-      deferred_command_buffer_.CmdVkSetDepthBias(dynamic_depth_bias_constant_factor_, 0.0f,
-                                                 dynamic_depth_bias_slope_factor_);
+      if (depth_bias_force_unorm) {
+        deferred_command_buffer_.CmdVkSetDepthBias2EXT(
+            dynamic_depth_bias_constant_factor_, 0.0f, dynamic_depth_bias_slope_factor_,
+            VK_DEPTH_BIAS_REPRESENTATION_LEAST_REPRESENTABLE_VALUE_FORCE_UNORM_EXT, true);
+      } else {
+        deferred_command_buffer_.CmdVkSetDepthBias(dynamic_depth_bias_constant_factor_, 0.0f,
+                                                   dynamic_depth_bias_slope_factor_);
+      }
       dynamic_depth_bias_update_needed_ = false;
     }
 
